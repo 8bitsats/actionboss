@@ -1,51 +1,191 @@
-# Solana Actions and Blockchain Links (Blinks)
+# solana-action-express
+solana actions server powered by node & express js
 
-[Read the docs to get started](https://solana.com/docs/advanced/actions)
+provides solana actions endpoints for solana blinks
 
-Watch this video tutorial on
-[How to Build Solana Actions](https://youtu.be/kCht01Ycif0)
+repo support: [McDegens Discord](https://discord.gg/Z9bUEf8gYb)
 
-Find
-[more resources for Solana Actions and blinks](https://solana.com/solutions/actions)
+featured at: [Awesome Solana Blinks](https://github.com/solana-developers/awesome-blinks/blob/master/README.md)
 
-Find example code snippets on how to build several different Solana Actions:
+our live mint blink: [On Dialect](https://dial.to/?action=solana-action:https://actions.mcdegen.xyz:8444/mint-config)
 
-- [Deployed sample code snippets](https://solana-actions.vercel.app/)
-- [Source code for code snippets](https://github.com/solana-developers/solana-actions/tree/main/examples/next-js)
+the default action for this repo is a usdc (or other spl) donation blink. however there is a sol donation action included as well.
 
-Install the `@solana/actions` SDK into your application:
+![solana blink](https://github.com/McDegens-DAO/solana-action-express/blob/main/blink.png)
 
-```shell
-npm add @solana/actions
+# auto install and start
+installs and starts the server
+```javascript
+git clone https://github.com/McDegens-DAO/solana-action-express.git && mv solana-action-express/* . && npm install && npm run actions
 ```
 
-- `@solana/actions` SDK on NPM:
-  - https://www.npmjs.com/package/@solana/actions
-- Typedocs for the `@solana/actions` SDK:
-  - https://solana-developers.github.io/solana-actions/
+# normal start
+```javascript
+npm run actions
+```
 
-## What are Solana Actions?
+# creating new actions
+1. create your new action file
+```javascript
+touch src/actions/my_new_action.js
+```
+2. include the new file into your [actions.js](https://github.com/McDegens-DAO/solana-action-express/blob/a5b8883a90303b31030f9cbc941a2b4ffbc22f27/src/actions.js#L32)
+```javascript
+// *********************************************************************************
+// include actions
+import { my_new_action } from './actions/my_new_action.js';
+app.use("/", my_new_action);
+import { donation_sol } from './actions/donation_sol.js';
+app.use("/", donation_sol);
+import { donation_usdc } from './actions/donation_usdc.js';
+app.use("/", donation_usdc);
+// include actions
+// *********************************************************************************
+```
+3. build your new action module
 
-[Solana Actions](https://solana.com/docs/advanced/actions#actions) are
-specification-compliant APIs that return transactions on the Solana blockchain
-to be previewed, signed, and sent across a number of various contexts, including
-QR codes, buttons + widgets, and websites across the internet. Actions make it
-simple for developers to integrate the things you can do throughout the Solana
-ecosystem right into your environment, allowing you to perform blockchain
-transactions without needing to navigate away to a different app or webpage.
+ *src/actions/my_new_action.js*
+```javascript
+'use strict';
+// *********************************************************************************
+// sol donation action
+import {rpc,server_host,http_port} from '../config.js';
+import Express from 'express';
+var my_new_action = Express.Router();
+my_new_action.get('/my-new-action-config',(req,res)=>{
+    let obj = {}
+    obj.icon = "";
+    obj.title = "";
+    obj.description = "";
+    obj.label = "donate";
+    obj.links = {
+    "actions": [
+        {
+          "label": "Send",
+          "href": server_host+http_port+"/my-new-action-build?amount={amount}",
+          "parameters": [
+            {
+              "name": "amount", // input field name
+              "label": "SOL Amount", // text input placeholder
+            }
+          ]
+        }
+      ]
+    }
+    res.send(JSON.stringify(obj));
+});
+my_new_action.route('/my-new-action-build').post(async function(req,res){
+  let err={};if(typeof req.body.account=="undefined"){err.transaction="error";err.message="action did not receive an account";res.send(JSON.stringify(err));}
 
-## What are blockchain links (blinks)?
+  // verify amount param was passed
+  if(typeof req.query.amount=="undefined"){err.transaction="error";
+    err.message = "action did not receive an amount to send";
+    res.send(JSON.stringify(err));
+  }
 
-[Blockchain links](https://solana.com/docs/advanced/actions#blinks) – or blinks
-– turn any Solana Action into a shareable, metadata-rich link. Blinks allow
-Action-aware clients (browser extension wallets, bots) to display additional
-capabilities for the user. On a website, a blink might immediately trigger a
-transaction preview in a wallet without going to a decentralized app; in
-Discord, a bot might expand the blink into an interactive set of buttons. This
-pushes the ability to interact on-chain to any web surface capable of displaying
-a URL.
+  // create instructions
+  let lamports = req.query.amount * 1000000000;
+  let from = new PublicKey(req.body.account);
+  let to = new PublicKey("GUFxwDrsLzSQ27xxTVe4y9BARZ6cENWmjzwe8XPy7AKu");
+  let donateIx = SystemProgram.transfer({fromPubkey:from, lamports:lamports, toPubkey:to});
 
-## License
+  // build transaction
+  let _tx_ = {};
+  _tx_.rpc = rpc;                     // string : required
+  _tx_.account = req.body.account;    // string : required
+  _tx_.instructions = [ donateIx ];   // array  : required
+  _tx_.signers = false;               // array  : default false
+  _tx_.serialize = true;              // bool   : default false
+  _tx_.encode = true;                 // bool   : default false
+  _tx_.table = false;                 // array  : default false
+  _tx_.tolerance = 2;                 // int    : default 1.1    
+  _tx_.compute = false;               // bool   : default true
+  _tx_.fees = false;                  // bool   : default true : helius rpc required when true
+  _tx_.priority = req.query.priority; // string : VeryHigh,High,Medium,Low,Min : default Medium
+  let tx = await mcbuild.tx(_tx_);    // package the tx
+  res.send(JSON.stringify(tx));       // output
 
-The Solana Actions JavaScript SDK is open source and available under the Apache
-License, Version 2.0. See the [LICENSE](./LICENSE) file for more info.
+});
+export {my_new_action};
+// *********************************************************************************
+```
+
+# rendering on x
+it's important to note that in order for a blink to render on x, the page you're sharing (i.e. yourwebsite.xyz/donate) must have twitter-card metatags. we use the following metatags:
+```javascript
+  <title>Title</title>
+  <meta name="description" content="" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@xHandle" />
+  <meta name="twitter:creator" content="@xHandle" />
+  <meta name="twitter:title" content="" />
+  <meta name="twitter:description" content="" />
+  <meta name="twitter:image" content="" />
+  <meta property="og:title" content="" />
+  <meta property="og:image" content="" />
+  <meta property="og:url" content="" />
+  <meta property="og:description" content="" />
+  <link rel="apple-touch-icon" href="" type="image/png">
+  <link rel="icon" href="" type="image/png">
+```
+you can test that your page is twitter-card enabled using this tool:
+
+https://www.bannerbear.com/tools/twitter-card-preview-tool/
+
+# actions registration
+It is currently necessary to register the domain of your actions server or else your blinks will not render on x.
+
+Dialect Action Registration: https://dial.to/register
+
+# x users
+users on x need to have a supporting wallet or the dialect extension to see the blinks. otherwise the post will default to the normal twitter-card.
+
+**supporting wallets/extensions**
+
+phantom wallet (enable in settings under "experimental features") [web store](https://chromewebstore.google.com/detail/phantom/bfnaelmomeimhlpmgjnjophhpkkoljpa)
+
+solflare wallet (soon)
+
+backpack wallet [web store](https://chromewebstore.google.com/detail/backpack/aflkmfhebedbjioipglgcbcmnbpgliof)
+
+dialect blinks [web store](https://chromewebstore.google.com/detail/dialect-blinks/mhklkgpihchphohoiopkidjnbhdoilof) 
+
+# non-node web apps
+if the twitter-card metatags for your blink are located on a non-node website, blog, one the many oss ecom platforms, anything running on apache, you can use this php file in place of your actions.json to allow public access from blink clients without opening up cross domain requests to other files on your system. you will also need to add a RewriteRule in your your .htaccess file to route all requests for actions.json to the actions.php file.
+
+**actions.php**
+```javascript
+<?php header("Access-Control-Allow-Origin:*");header('Access-Control-Max-Age:86400');header('Content-Type:application/json');
+header("Access-Control-Allow-Methods:GET");if(isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS'])){header("Access-Control-Allow-Headers:{$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']}");}$response=new stdClass;$rules=array();$rule=new stdClass;
+//// define rules below
+
+// ***************************************************************
+// repeat for each rule
+$rule->pathPattern = "/donate*";
+$rule->apiPath = "https://actions.mcdegen.xyz:8444/donate-config";
+$rules[] = $rule;
+// ***************************************************************
+
+/// output data
+$response->rules=$rules;echo json_encode($response);exit();
+```
+**.htaccess**
+```javascript
+RewriteRule ^actions.json$ actions.php [L]
+```
+testing a request to yourwebsite.com/actions.json should respond with these headers
+```javascript
+Date: Fri, 28 Jun 2024 00:21:13 GMT
+Server: Apache
+Access-Control-Allow-Origin: *
+Access-Control-Max-Age: 86400
+Access-Control-Allow-Methods: GET
+Transfer-Encoding: chunked
+Content-Type: application/json
+```
+
+# official solana actions docs
+
+https://solana.com/docs/advanced/actions
+
+https://github.com/solana-developers/solana-actions
